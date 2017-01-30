@@ -1,4 +1,4 @@
-var CORSURLPrefix;
+var CORSURLPrefix, effectiveDate, earliestDate, retrievedGDPFlag;
 
 $(window).load(function() {
     if ($('.se-pre-load').is(':visible')) {
@@ -10,11 +10,12 @@ $(function() {
     var url;
     CORSURLPrefix = 'https://cors-anywhere.herokuapp.com/';
     url = 'https://treasurydirect.gov/NP/debt/current';
+    retrievedGDPFlag = false;
     $.get(CORSURLPrefix + url, handleGetResponseCurrent);
 });
 
 function handleGetResponseCurrent(data) {
-    var html, url, effectiveDate, earliestDate;
+    var html, url;
     html = $.parseHTML(data.replace(/<img[^>]+>/gi, ''));
     earliestDate = new Date(Date.UTC(1993, 0, 4));  // Earliest data starts Jan 4, 1993.
     effectiveDate = new Date(Date.parse($('table.data1 tr:eq(1) td:eq(0)', html).text()));
@@ -34,6 +35,57 @@ function handleGetResponseHistory(data) {
     $('.se-pre-load').hide();
     $('.panel').delay(1500).show();
     initiateChart(historyData);
+}
+
+function handleGetJSONResponseGDPAPI(evt, data) {
+    var firstFlag = true, last_amount = null;
+    $.each(data['dataset'], function (index, value) {
+        var nextDate = new Date(Date.parse(value['date']));
+        if (nextDate >= earliestDate) {
+            if (firstFlag) {
+                if (!last_amount) {
+                    last_amount = value['amount'];
+                }
+                evt.addPoint([earliestDate.getTime(), last_amount], false);
+                firstFlag = false;
+            }
+            // Add point that is either ending point for previous value or if first time, starting point for first value.
+            evt.addPoint([nextDate.getTime(), last_amount], false);
+            // Add point to start line for current value.
+            evt.addPoint([nextDate.getTime(), value['amount']], false);
+            // Zoom out full.
+            evt.chart.xAxis[0].setExtremes(earliestDate.getTime(), effectiveDate.getTime());
+        }
+        last_amount = value['amount'];
+    });
+    // Add a point to close the line for the latest value.
+    if (!firstFlag) {
+        evt.addPoint([effectiveDate.getTime(), last_amount], false);
+    }
+    evt.show();
+    evt.chart.redraw();
+    retrievedGDPFlag = true;
+}
+
+function onLegendItemClick() {
+    var url, LegendItemClickEvent;
+    url = 'https://debttothepenny.com/api/v1.0/gdp';
+    LegendItemClickEvent = this;
+    if (!retrievedGDPFlag) {
+        $('.panel').hide();
+        $('.se-pre-load').show();
+        $.getJSON(url,
+            function (data) {
+                handleGetJSONResponseGDPAPI(LegendItemClickEvent, data);
+            })
+            .fail(function () {
+                // TODO: Notify user that GDP not accessible.
+            })
+            .always(function () {
+                $('.se-pre-load').hide();
+                $('.panel').delay(1500).show();
+            });
+    }
 }
 
 // Chart
@@ -82,6 +134,20 @@ function initiateChart(historyData) {
                     [1, Highcharts.Color(Highcharts.getOptions().colors[0]).setOpacity(0).get('rgba')]
                 ]
             }
+        }, {
+            name: 'GDP',
+            type: 'line',
+            data: [],
+            color: Highcharts.getOptions().colors[2],
+            lineWidth: 3,
+            marker: {
+                enabled: true,
+                radius: 4
+            },
+            events: {
+                legendItemClick: onLegendItemClick
+            },
+            visible: false
         }],
         credits: {
             enabled: false
@@ -91,7 +157,19 @@ function initiateChart(historyData) {
         },
         tooltip: {
             headerFormat: '<span>{point.x:%b %d, %Y}</span><br/>',
-            pointFormat: '<span style="color:{point.color}">\u25CF</span> {series.name}: <b>${point.y:,.2f} USD</b><br/>'
+            pointFormat: '<span style="color:{point.color}">\u25CF</span> {series.name}: <b>${point.y:,.2f} USD</b><br/>',
+            split: true
+        },
+        legend: {
+            enabled: true,
+            layout: 'horizontal',
+            verticalAlign: 'center',
+            align: 'left',
+            x: 60,
+            y: 74,
+            borderColor: '#C98657',
+            borderWidth: 1,
+            floating: true
         }
     });
 }
