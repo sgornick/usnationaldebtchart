@@ -4,9 +4,6 @@ module.exports = {
         "jquery": true
     },
     "extends": "eslint:recommended",
-    "globals" : {
-        "Highcharts": false
-    },
     "rules": {
         "indent": [
             "error",
@@ -24,5 +21,8 @@ module.exports = {
             "error",
             "always"
         ]
+    },
+    "globals" : {
+        "Highcharts": false
     }
 };
