@@ -9,19 +9,27 @@ $(window).load(function() {
 $(function() {
     var url;
     CORSURLPrefix = 'https://cors-anywhere.herokuapp.com/';
-    url = 'https://treasurydirect.gov/NP/debt/current';
+    url = 'https://treasurydirect.gov/NP_WS/debt/current?format=jsonp';
     retrievedGDPFlag = false;
-    $.get(CORSURLPrefix + url, handleGetResponseCurrent);
+    $.ajax({
+        type: 'GET',
+        url : CORSURLPrefix + url,
+        success: handleGetResponseCurrent,
+        dataType: 'text',  // Due to CORS, cannot use datatype jsonp.
+        error : function(XMLHttpRequest, textStatus, errorThrown) {
+            console.log("Error occured while loading from current."+textStatus);
+        }
+    });
 });
 
-function handleGetResponseCurrent(data) {
-    var html, url;
-    html = $.parseHTML(data.replace(/<img[^>]+>/gi, ''));
+function handleGetResponseCurrent(jsonText) {
+    var data, url;
+    data = JSON.parse(jsonText.slice(jsonText.indexOf('{'), jsonText.lastIndexOf('}') + 1));
     earliestDate = new Date(Date.UTC(1993, 0, 4));  // Earliest data starts Jan 4, 1993.
-    effectiveDate = new Date(Date.parse($('table.data1 tr:eq(1) td:eq(0)', html).text()));
+    effectiveDate = new Date(data.effectiveDate);
     url = 'https://treasurydirect.gov/NP/debt/search?startMonth=' + (earliestDate.getUTCMonth() + 1) + '&startDay=' + earliestDate.getUTCDate() + '&startYear=' + earliestDate.getUTCFullYear() + '&endMonth=' + (effectiveDate.getUTCMonth() + 1) + '&endDay=' + effectiveDate.getUTCDate() + '&endYear=' + effectiveDate.getUTCFullYear();
     $('#currentDebtAmount').empty();
-    $('#currentDebtAmount').append(' Current Total Public Debt (As-of: '+ formatDateUTC(effectiveDate) +'): $' + $('table.data1 tr:eq(1) td:eq(3)', html).text());
+    $('#currentDebtAmount').append(' Current Total Public Debt (As-of: '+ formatDateUTC(effectiveDate) +' UTC): ' + (data.totalDebt).toLocaleString('en-US', {style: 'currency', currency: 'USD'}));
     $.get(CORSURLPrefix + url, handleGetResponseHistory);
 }
 
